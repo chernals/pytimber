@@ -1,4 +1,6 @@
 import os, glob, time, datetime
+import threading
+import multiprocessing as mp
 import jpype
 import numpy as np
 
@@ -61,6 +63,56 @@ source_dict={'mdb' : DataLocationPreferences.MDB_PRO,
              'ldb' : DataLocationPreferences.LDB_PRO,
              'all' : DataLocationPreferences.MDB_AND_LDB_PRO
              }
+             
+def processDataset(dataset, datatype, with_timestamps = True):
+    datas = []
+    tss = []
+    for tt in dataset:
+        if with_timestamps:
+            ts = tt.getStamp()
+            ts = datetime.datetime.fromtimestamp(ts.fastTime/1000.+ts.getNanos()/1e9)
+            tss.append(ts)
+        if datatype == 'MATRIXNUMERIC':
+            val = np.array(tt.getMatrixDoubleValues())
+        elif datatype == 'VECTORNUMERIC':
+            val = np.array(tt.getDoubleValues())
+        elif datatype == 'NUMERIC':
+            val = tt.getDoubleValue()
+        elif datatype == 'FUNDAMENTAL':
+            val = 1
+        else:
+            print('Unsupported datatype, returning the java object')
+            val = tt
+        datas.append(val)
+    if with_timestamps:
+        return (tss, datas)
+    else:
+        return datas
+        
+def processDatasetQ(dataset, datatype, queue, with_timestamps = True):
+    datas = []
+    tss = []
+    for tt in dataset:
+        if with_timestamps:
+            ts = tt.getStamp()
+            ts = datetime.datetime.fromtimestamp(ts.fastTime/1000.+ts.getNanos()/1e9)
+            tss.append(ts)
+        if datatype == 'MATRIXNUMERIC':
+            val = np.array(tt.getMatrixDoubleValues())
+        elif datatype == 'VECTORNUMERIC':
+            val = np.array(tt.getDoubleValues())
+        elif datatype == 'NUMERIC':
+            val = tt.getDoubleValue()
+        elif datatype == 'FUNDAMENTAL':
+            val = 1
+        else:
+            print('Unsupported datatype, returning the java object')
+            val = tt
+        datas.append(val)
+    if with_timestamps:
+        queue.put((tss, datas))
+    else:
+        return queue.put(datas)
 
 class LoggingDB(object):
     def __init__(self, appid='LHC_MD_ABP_ANALYSIS', clientid='BEAM PHYSICS', source='mdb', silent=False):
@@ -111,33 +163,10 @@ class LoggingDB(object):
             variables = None
         return variables
 
-    def processDataset(self, dataset, datatype):
-        datas = []
-        tss = []
-        for tt in dataset:
-            ts = tt.getStamp()
-            ts = ts.fastTime/1000.+ts.getNanos()/1e9
-            ts = datetime.datetime.fromtimestamp(ts)
-            if datatype == 'MATRIXNUMERIC':
-                val = np.array(tt.getMatrixDoubleValues())
-            elif datatype == 'VECTORNUMERIC':
-                val = np.array(tt.getDoubleValues())
-            elif datatype == 'NUMERIC':
-                val = tt.getDoubleValue()
-            elif datatype == 'FUNDAMENTAL':
-                val = 1
-            else:
-                print('Unsupported datatype, returning the java object')
-                val = tt
-            datas.append(val)
-            tss.append(ts)
-        return (tss, datas)
-            
-
     def getAligned(self, pattern_or_list, t1, t2, fundamental=None):
         ts1 = toTimestamp(t1)
         ts2 = toTimestamp(t2)
-        out = {}
+        self._tmp_out = {}
         master_variable = None
 
         # Build variable list
@@ -163,23 +192,43 @@ class LoggingDB(object):
 
         # Acquire master dataset
         if fundamental is not None:
-            master_ds=self._ts.getDataInTimeWindowFilteredByFundamentals(master_variable, ts1, ts2, fundamentals)
+            self._tmp_master_ds=self._ts.getDataInTimeWindowFilteredByFundamentals(master_variable, ts1, ts2, fundamentals)
         else:
-            master_ds=self._ts.getDataInTimeWindow(master_variable, ts1, ts2)
-        if not self._silent: print('Retrieved {0} values for {1} (master)'.format(master_ds.size(), master_name))
+            self._tmp_master_ds=self._ts.getDataInTimeWindow(master_variable, ts1, ts2)
+        if not self._silent: print('Retrieved {0} values for {1} (master)'.format(self._tmp_master_ds.size(), master_name))
 
         # Prepare master dataset for output
-        out['timestamps'], out[master_name] = self.processDataset(master_ds, master_ds.getVariableDataType().toString())
-
+        start_time = time.time()
+        self._tmp_out['timestamps'], self._tmp_out[master_name] = processDataset(self._tmp_master_ds, self._tmp_master_ds.getVariableDataType().toString())
+        print(time.time() - start_time, "seconds")
+        
         # Acquire aligned data based on master dataset timestamps
         for v in variables:
             if v == master_name:
                 continue
             jvar = variables.getVariable(v)
-            res = self._ts.getDataAlignedToTimestamps(jvar, master_ds)
-            if not self._silent: print('Retrieved {0} values for {1}'.format(res.size(), jvar.getVariableName()))
-            out[v] = self.processDataset(res, res.getVariableDataType().toString())[1]
-        return out
+            t = threading.Thread(target=self.thread_acq, args=(v, jvar))
+            t.start()
+        main_thread = threading.currentThread()
+        print("%d active threads." % threading.active_count())
+        for t in threading.enumerate():
+            if t is main_thread:
+                continue
+            t.join()
+        return self._tmp_out
+        
+    def thread_acq(self, v, jvar):
+        jpype.attachThreadToJVM()
+        res = self._ts.getDataAlignedToTimestamps(jvar, self._tmp_master_ds)
+        if not self._silent: print('Retrieved {0} values for {1}'.format(res.size(), jvar.getVariableName()))
+        start_time = time.time()
+        q = mp.Queue()
+        p = mp.Process(target=processDatasetQ, args=(res, res.getVariableDataType().toString(), q, False))
+        p.start()
+        p.join()
+        print(time.time()-start_time, "seconds")
+        with threading.Lock():
+            self._tmp_out[v] = q.get()
         
     def get(self, pattern_or_list, t1, t2=None, fundamental=None):
         """

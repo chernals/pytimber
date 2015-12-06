@@ -164,10 +164,11 @@ class LoggingDB(object):
         return variables
 
     def getAligned(self, pattern_or_list, t1, t2, fundamental=None):
+        print("Multiprocessing version of getAligned")
         ts1 = toTimestamp(t1)
         ts2 = toTimestamp(t2)
-        self._tmp_out = {}
         master_variable = None
+        datasets = []
 
         # Build variable list
         variables = self.getVariablesList(pattern_or_list, ts1, ts2)
@@ -223,9 +224,10 @@ class LoggingDB(object):
         if not self._silent: print('Retrieved {0} values for {1}'.format(res.size(), jvar.getVariableName()))
         start_time = time.time()
         q = mp.Queue()
-        p = mp.Process(target=processDatasetQ, args=(res, res.getVariableDataType().toString(), q, False))
-        p.start()
-        p.join()
+        processDatasetQ(res, res.getVariableDataType().toString(), q, False)
+        #p = mp.Process(target=processDatasetQ, args=(res, res.getVariableDataType().toString(), q, False))
+        #p.start()
+        #p.join()
         print(time.time()-start_time, "seconds")
         with threading.Lock():
             self._tmp_out[v] = q.get()

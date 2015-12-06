@@ -63,14 +63,15 @@ source_dict={'mdb' : DataLocationPreferences.MDB_PRO,
              'ldb' : DataLocationPreferences.LDB_PRO,
              'all' : DataLocationPreferences.MDB_AND_LDB_PRO
              }
-             
-def processDataset(dataset, datatype, with_timestamps = True):
+
+def processDataset(ds, datatype, with_timestamp):
+    start_time = time.time()
     datas = []
     tss = []
-    for tt in dataset:
-        if with_timestamps:
+    for tt in ds:
+        if with_timestamp:
             ts = tt.getStamp()
-            ts = datetime.datetime.fromtimestamp(ts.fastTime/1000.+ts.getNanos()/1e9)
+            ts = datetime.datetime.fromtimestamp(ts.fastTime/1000.)
             tss.append(ts)
         if datatype == 'MATRIXNUMERIC':
             val = np.array(tt.getMatrixDoubleValues())
@@ -84,36 +85,12 @@ def processDataset(dataset, datatype, with_timestamps = True):
             print('Unsupported datatype, returning the java object')
             val = tt
         datas.append(val)
-    if with_timestamps:
+    print("Processing of %s:" % ds.getVariableName(), time.time()-start_time, "seconds")
+    if with_timestamp:
         return (tss, datas)
     else:
         return datas
         
-def processDatasetQ(dataset, datatype, queue, with_timestamps = True):
-    datas = []
-    tss = []
-    for tt in dataset:
-        if with_timestamps:
-            ts = tt.getStamp()
-            ts = datetime.datetime.fromtimestamp(ts.fastTime/1000.+ts.getNanos()/1e9)
-            tss.append(ts)
-        if datatype == 'MATRIXNUMERIC':
-            val = np.array(tt.getMatrixDoubleValues())
-        elif datatype == 'VECTORNUMERIC':
-            val = np.array(tt.getDoubleValues())
-        elif datatype == 'NUMERIC':
-            val = tt.getDoubleValue()
-        elif datatype == 'FUNDAMENTAL':
-            val = 1
-        else:
-            print('Unsupported datatype, returning the java object')
-            val = tt
-        datas.append(val)
-    if with_timestamps:
-        queue.put((tss, datas))
-    else:
-        return queue.put(datas)
-
 class LoggingDB(object):
     def __init__(self, appid='LHC_MD_ABP_ANALYSIS', clientid='BEAM PHYSICS', source='mdb', silent=False):
         loc = source_dict[source]
@@ -170,6 +147,9 @@ class LoggingDB(object):
         master_variable = None
         self._datasets = []
         self._master_ds = None
+        manager = mp.Manager()
+        out = manager.dict()
+        ps = []
 
         # Build variable list
         variables = self.getVariablesList(pattern_or_list, ts1, ts2)
@@ -193,21 +173,18 @@ class LoggingDB(object):
                 return {}
 
         # Acquire master dataset
+        start_time = time.time()
         if fundamental is not None:
             ds=self._ts.getDataInTimeWindowFilteredByFundamentals(master_variable, ts1, ts2, fundamentals)
         else:
             ds=self._ts.getDataInTimeWindow(master_variable, ts1, ts2)
-        self._datasets.append(ds)
-        self._master_ds = ds
+        print("Aqn of master:",time.time()-start_time, "seconds")
         if not self._silent: print('Retrieved {0} values for {1} (master)'.format(ds.size(), master_name))
-
-        # Prepare master dataset for output
-        # should go in the loop with the other ones
-        #start_time = time.time()
-        #self._tmp_out['timestamps'], self._tmp_out[master_name] = processDataset(self._tmp_master_ds, self._tmp_master_ds.getVariableDataType().toString())
-        #print(time.time() - start_time, "seconds")
-        
+        out["timestamp"], out[master_name] = processDataset(ds, ds.getVariableDataType().toString(), True)
+        self._master_ds = ds
+ 
         # Acquire aligned data based on master dataset timestamps
+        start_time = time.time()
         for v in variables:
             if v == master_name:
                 continue
@@ -215,29 +192,34 @@ class LoggingDB(object):
             t = threading.Thread(target=self.threaded_acq, args=(jvar, ))
             t.start()
         main_thread = threading.currentThread()
-        print("%d active threads." % threading.active_count())
         for t in threading.enumerate():
             if t is main_thread:
                 continue
             t.join()
+        print("Total aqn time:", time.time()-start_time, "seconds")
             
         # Process the datasets
-        out = {}
-        ps = []
-        q = mp.Queue()
-        for ds in datasets:
-            p = mp.Process(target=processDatasetQ, args=(ds, ds.getVariableDataType().toString(), q, False))
+        start_time = time.time()
+        for ds in self._datasets:
+            p = mp.Process(target=self.mp_processing, args=(ds, out))
             p.start()
+            ps.append(p)
         for p in ps:
-            p.join()    
+            p.join()
+        print("Total processing time:", time.time()-start_time, "seconds")
         return out
+        
+    def mp_processing(self, ds, out):
+        out[ds.getVariableName()] = processDataset(ds, ds.getVariableDataType().toString(), False)
 
     def threaded_acq(self, jvar):
         jpype.attachThreadToJVM()
+        start_time = time.time()
         v = jvar.getVariableName()
         ds = self._ts.getDataAlignedToTimestamps(jvar, self._master_ds)
         if not self._silent: print('Retrieved {0} values for {1}'.format(ds.size(), v))
         self._datasets.append(ds)
+        print("Aqn in thread:", time.time()-start_time, "seconds")
         
     def get(self, pattern_or_list, t1, t2=None, fundamental=None):
         """

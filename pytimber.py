@@ -231,6 +231,10 @@ class LoggingDB(object):
         print("Aqn in thread:", time.time()-start_time, "seconds")
         
     def threaded_acq(self, jvar, ts1, ts2):
+        """
+        Acquire 'Data in time window' from Timber (classic behavior)
+        Stores the dataset in the class list for further processing
+        """
         jpype.attachThreadToJVM()
         start_time = time.time()
         v = jvar.getVariableName()
@@ -238,6 +242,20 @@ class LoggingDB(object):
         if not self._silent: print('Retrieved {0} values for {1}'.format(ds.size(), v))
         self._datasets.append(ds)
         print("Aqn in thread:", time.time()-start_time, "seconds")
+        
+    def threaded_last_acq(self, jvar, ts1):
+        """
+        Acquire 'Last data prior to timestamp within default interval' from Timber
+        Stores the dataset in the class list for further processing
+        """
+        jpype.attachThreadToJVM()
+        start_time = time.time()
+        v = jvar.getVariableName()
+        ds = self._ts.getLastDataPriorToTimestampWithinDefaultInterval(jvar, ts1)
+        if not self._silent: print('Retrieved {0} values for {1}'.format(ds.size(), v))
+        self._datasets.append(ds)
+        print("Aqn in thread:", time.time()-start_time, "seconds")
+        
         
     def get(self, pattern_or_list, t1, t2=None, fundamental=None):
         """
@@ -276,9 +294,8 @@ class LoggingDB(object):
         for v in variables:
             jvar = variables.getVariable(v)
             if t2 is None:
-                res = [self._ts.getLastDataPriorToTimestampWithinDefaultInterval(jvar, ts1)]
-                datatype = res[0].getVariableDataType().toString()
-                if not self._silent: print('Retrieved {0} values for {1}'.format(1, jvar.getVariableName()))
+                t = threading.Thread(target=self.threaded_acq, args=(jvar, ts1))
+                t.start()
             else:
                 if fundamental is not None:
                     t = threading.Thread(target=self.threaded_filtered_acq, args=(jvar, ts1, ts2, fundamentals))
@@ -288,6 +305,7 @@ class LoggingDB(object):
                     t.start()
                     res = self._ts.getDataInTimeWindow(jvar, ts1, ts2)
                        
+        # Join the acquisition threads
         main_thread = threading.currentThread()
         for t in threading.enumerate():
             if t is main_thread:

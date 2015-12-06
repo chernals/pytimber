@@ -168,7 +168,8 @@ class LoggingDB(object):
         ts1 = toTimestamp(t1)
         ts2 = toTimestamp(t2)
         master_variable = None
-        datasets = []
+        self._datasets = []
+        self._master_ds = None
 
         # Build variable list
         variables = self.getVariablesList(pattern_or_list, ts1, ts2)
@@ -193,22 +194,25 @@ class LoggingDB(object):
 
         # Acquire master dataset
         if fundamental is not None:
-            self._tmp_master_ds=self._ts.getDataInTimeWindowFilteredByFundamentals(master_variable, ts1, ts2, fundamentals)
+            ds=self._ts.getDataInTimeWindowFilteredByFundamentals(master_variable, ts1, ts2, fundamentals)
         else:
-            self._tmp_master_ds=self._ts.getDataInTimeWindow(master_variable, ts1, ts2)
-        if not self._silent: print('Retrieved {0} values for {1} (master)'.format(self._tmp_master_ds.size(), master_name))
+            ds=self._ts.getDataInTimeWindow(master_variable, ts1, ts2)
+        self._datasets.append(ds)
+        self._master_ds = ds
+        if not self._silent: print('Retrieved {0} values for {1} (master)'.format(ds.size(), master_name))
 
         # Prepare master dataset for output
-        start_time = time.time()
-        self._tmp_out['timestamps'], self._tmp_out[master_name] = processDataset(self._tmp_master_ds, self._tmp_master_ds.getVariableDataType().toString())
-        print(time.time() - start_time, "seconds")
+        # should go in the loop with the other ones
+        #start_time = time.time()
+        #self._tmp_out['timestamps'], self._tmp_out[master_name] = processDataset(self._tmp_master_ds, self._tmp_master_ds.getVariableDataType().toString())
+        #print(time.time() - start_time, "seconds")
         
         # Acquire aligned data based on master dataset timestamps
         for v in variables:
             if v == master_name:
                 continue
             jvar = variables.getVariable(v)
-            t = threading.Thread(target=self.thread_acq, args=(v, jvar))
+            t = threading.Thread(target=self.threaded_acq, args=(jvar, ))
             t.start()
         main_thread = threading.currentThread()
         print("%d active threads." % threading.active_count())
@@ -216,21 +220,24 @@ class LoggingDB(object):
             if t is main_thread:
                 continue
             t.join()
-        return self._tmp_out
-        
-    def thread_acq(self, v, jvar):
-        jpype.attachThreadToJVM()
-        res = self._ts.getDataAlignedToTimestamps(jvar, self._tmp_master_ds)
-        if not self._silent: print('Retrieved {0} values for {1}'.format(res.size(), jvar.getVariableName()))
-        start_time = time.time()
+            
+        # Process the datasets
+        out = {}
+        ps = []
         q = mp.Queue()
-        processDatasetQ(res, res.getVariableDataType().toString(), q, False)
-        #p = mp.Process(target=processDatasetQ, args=(res, res.getVariableDataType().toString(), q, False))
-        #p.start()
-        #p.join()
-        print(time.time()-start_time, "seconds")
-        with threading.Lock():
-            self._tmp_out[v] = q.get()
+        for ds in datasets:
+            p = mp.Process(target=processDatasetQ, args=(ds, ds.getVariableDataType().toString(), q, False))
+            p.start()
+        for p in ps:
+            p.join()    
+        return out
+
+    def threaded_acq(self, jvar):
+        jpype.attachThreadToJVM()
+        v = jvar.getVariableName()
+        ds = self._ts.getDataAlignedToTimestamps(jvar, self._master_ds)
+        if not self._silent: print('Retrieved {0} values for {1}'.format(ds.size(), v))
+        self._datasets.append(ds)
         
     def get(self, pattern_or_list, t1, t2=None, fundamental=None):
         """

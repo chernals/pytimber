@@ -5,8 +5,8 @@
 New branch **multiprocessing** with support for parallelized Java CALS acquisition and data processing. The performance gain is excellent so far.
 
     * Multithreading in Python to parallelize the Java acquisition API calls
-    * Use of python *multiprocessing* to parallelize the data processing (extraction from Java objects and type conversion)
-
+    * Use of python `multiprocessing` to parallelize the data processing
+   
 Merged from my own package. The API should be identical, except for the new functionalities that should be transparent for existing use.
 
     * Developed for use with 'cycled' machines (PSB, PS, SPS)

@@ -303,7 +303,6 @@ class LoggingDB(object):
                 else:
                     t = threading.Thread(target=self.threaded_acq, args=(jvar, ts1, ts2))
                     t.start()
-                    res = self._ts.getDataInTimeWindow(jvar, ts1, ts2)
                        
         # Join the acquisition threads
         main_thread = threading.currentThread()

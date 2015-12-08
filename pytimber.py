@@ -65,7 +65,7 @@ source_dict={'mdb' : DataLocationPreferences.MDB_PRO,
              }
         
 class LoggingDB(object):
-    def __init__(self, appid='LHC_MD_ABP_ANALYSIS', clientid='BEAM PHYSICS', source='mdb', silent=False):
+    def __init__(self, appid='LHC_MD_ABP_ANALYSIS', clientid='BEAM PHYSICS', source='all', silent=False):
         loc = source_dict[source]
         self._builder = ServiceBuilder.getInstance(appid, clientid, loc)
         self._md = self._builder.createMetaService()

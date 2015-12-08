@@ -1,4 +1,4 @@
-import os, glob, time, datetime
+import os, glob, time, datetime, io
 import threading
 import multiprocessing as mp
 import jpype
@@ -117,7 +117,9 @@ class LoggingDB(object):
         start_time = time.time()
         datas = []
         tss = []
+        i = -1
         for tt in ds:
+            i += 1
             if with_timestamp:
                 ts = tt.getStamp()
                 ts = datetime.datetime.fromtimestamp(ts.fastTime/1000.)
@@ -125,7 +127,8 @@ class LoggingDB(object):
             if datatype == 'MATRIXNUMERIC':
                 val = np.array(tt.getMatrixDoubleValues())
             elif datatype == 'VECTORNUMERIC':
-                val = np.array(tt.getDoubleValues())
+                val = np.array(list(tt.getDoubleValues()))
+                #val = np.array(tt.getDoubleValues())
             elif datatype == 'NUMERIC':
                 val = tt.getDoubleValue()
             elif datatype == 'FUNDAMENTAL':
@@ -138,6 +141,7 @@ class LoggingDB(object):
         if with_timestamp:
             return (tss, datas)
         else:
+            print(datas)
             return datas
 
     def getAligned(self, pattern_or_list, t1, t2, fundamental=None):
@@ -180,7 +184,7 @@ class LoggingDB(object):
             ds=self._ts.getDataInTimeWindow(master_variable, ts1, ts2)
         print("Aqn of master:",time.time()-start_time, "seconds")
         if not self._silent: print('Retrieved {0} values for {1} (master)'.format(ds.size(), master_name))
-        out["timestamp"], out[master_name] = self.processDataset(ds, ds.getVariableDataType().toString(), True)
+        out["timestamps"], out[master_name] = self.processDataset(ds, ds.getVariableDataType().toString(), True)
         self._master_ds = ds
  
         # Acquire aligned data based on master dataset timestamps

@@ -135,6 +135,7 @@ class LoggingDB(object):
                 print('Unsupported datatype, returning the java object')
                 val = tt
             datas.append(val)
+            del tt
         print("Processing of %s:" % ds.getVariableName(), time.time()-start_time, "seconds")
         if with_timestamp:
             return (tss, datas)

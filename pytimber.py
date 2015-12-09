@@ -72,6 +72,7 @@ class LoggingDB(object):
         self._ts = self._builder.createTimeseriesService()
         self.tree = Hierarchy('root', None, None, self._md)
         self._silent = silent
+        self._datasets = []
 
     def mute(self):
         self._silent = True
@@ -167,7 +168,7 @@ class LoggingDB(object):
             return {}
         else:
             for i, v in enumerate(variables):
-                if i == 0:
+                if i == 1:
                     master_variable = variables.getVariable(0)
                     master_name = master_variable.toString()
                     if not self._silent: print('%s (using as master).' % v)
@@ -182,6 +183,8 @@ class LoggingDB(object):
             ds=self._ts.getDataInTimeWindow(master_variable, ts1, ts2)
         print("Aqn of master:",time.time()-start_time, "seconds")
         if not self._silent: print('Retrieved {0} values for {1} (master)'.format(ds.size(), master_name))
+        if ds.size() == 0:
+            return {}
         out["timestamps"], out[master_name] = self.processDataset(ds, ds.getVariableDataType().toString(), True)
         self._master_ds = ds
  

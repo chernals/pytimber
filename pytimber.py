@@ -117,12 +117,10 @@ class LoggingDB(object):
         start_time = time.time()
         datas = []
         tss = []
-        i = -1
         for tt in ds:
-            i += 1
             if with_timestamp:
                 ts = tt.getStamp()
-                ts = datetime.datetime.fromtimestamp(ts.fastTime/1000.)
+                ts = datetime.datetime.fromtimestamp(float(ts.fastTime)/1000.)
                 tss.append(ts)
             if datatype == 'MATRIXNUMERIC':
                 val = np.array(tt.getMatrixDoubleValues())
@@ -141,7 +139,6 @@ class LoggingDB(object):
         if with_timestamp:
             return (tss, datas)
         else:
-            print(datas)
             return datas
 
     def getAligned(self, pattern_or_list, t1, t2, fundamental=None):
@@ -154,6 +151,12 @@ class LoggingDB(object):
         manager = mp.Manager()
         out = manager.dict()
         ps = []
+        
+        # Fundamentals
+        if fundamental is not None:
+            fundamentals = self.getFundamentals(ts1, ts2, fundamental)
+            if fundamentals is None:
+                return {}
 
         # Build variable list
         variables = self.getVariablesList(pattern_or_list, ts1, ts2)
@@ -169,12 +172,6 @@ class LoggingDB(object):
                     if not self._silent: print('%s (using as master).' % v)
                 else:
                     if not self._silent: print(v)
-        
-        # Fundamentals
-        if fundamental is not None:
-            fundamentals = self.getFundamentals(ts1, ts2, fundamental)
-            if fundamentals is None:
-                return {}
 
         # Acquire master dataset
         start_time = time.time()

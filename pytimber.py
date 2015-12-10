@@ -215,7 +215,6 @@ class LoggingDB(object):
         return out
         
     def mp_processing(self, ds, out, with_stamp=False):
-        print("Processing.")
         out[ds.getVariableName()] = self.processDataset(ds, ds.getVariableDataType().toString(), with_stamp)
 
     def threaded_aligned_acq(self, jvar):
@@ -230,9 +229,7 @@ class LoggingDB(object):
     def threaded_filtered_acq(self, jvar, ts1, ts2, f):
         jpype.attachThreadToJVM()
         start_time = time.time()
-        print("Acquiring in thread.")
         v = jvar.getVariableName()
-        print(f)
         ds = self._ts.getDataInTimeWindowFilteredByFundamentals(jvar, ts1, ts2, f)
         if not self._silent: print('Retrieved {0} values for {1}'.format(ds.size(), v))
         self._datasets.append(ds)
@@ -323,6 +320,7 @@ class LoggingDB(object):
         # Process the datasets
         start_time = time.time()
         for ds in self._datasets:
+            print("Launching a process to do %s" % ds.getVariableName())
             p = mp.Process(target=self.mp_processing, args=(ds, out, True))
             p.start()
             ps.append(p)

@@ -226,12 +226,11 @@ class LoggingDB(object):
         self._datasets.append(ds)
         print("Aqn in thread:", time.time()-start_time, "seconds")
         
-    def threaded_filtered_acq(self, jvar, ts1, ts2, fundamentals):
+    def threaded_filtered_acq(self, jvar, ts1, ts2, f):
         jpype.attachThreadToJVM()
         start_time = time.time()
         v = jvar.getVariableName()
-        print(v)
-        ds = self._ts.getDataInTimeWindowFilteredByFundamentals(jvar, ts1, ts2, fundamentals)
+        ds = self._ts.getDataInTimeWindowFilteredByFundamentals(jvar, ts1, ts2, f)
         if not self._silent: print('Retrieved {0} values for {1}'.format(ds.size(), v))
         self._datasets.append(ds)
         print("Aqn in thread:", time.time()-start_time, "seconds")
@@ -300,11 +299,10 @@ class LoggingDB(object):
         for v in variables:
             jvar = variables.getVariable(v)
             if t2 is None:
-                ds = [self._ts.getLastDataPriorToTimestampWithinDefaultInterval(jvar, ts1)]
-                self._datasets.append(ds)
-                if not self._silent: print('Retrieved {0} values for {1}'.format(1, jvar.getVariableName()))
+                t = threading.Thread(target=self.threaded_last_acq, args=(jvar, ts1))
+                t.start()
             else:
-                if fundamental is not None:
+                if fundamentals is not None:
                     t = threading.Thread(target=self.threaded_filtered_acq, args=(jvar, ts1, ts2, fundamentals))
                     t.start()
                 else:

@@ -229,7 +229,6 @@ class LoggingDB(object):
     def threaded_filtered_acq(self, jvar, ts1, ts2, f):
         jpype.attachThreadToJVM()
         start_time = time.time()
-        print(start_time)
         v = jvar.getVariableName()
         ds = self._ts.getDataInTimeWindowFilteredByFundamentals(jvar, ts1, ts2, f)
         if not self._silent: print('Retrieved {0} values for {1}'.format(ds.size(), v))

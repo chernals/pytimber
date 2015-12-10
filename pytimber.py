@@ -232,7 +232,8 @@ class LoggingDB(object):
         v = jvar.getVariableName()
         ds = self._ts.getDataInTimeWindowFilteredByFundamentals(jvar, ts1, ts2, f)
         if not self._silent: print('Retrieved {0} values for {1}'.format(ds.size(), v))
-        self._datasets.append(ds)
+        with threading.Lock():
+            self._datasets.append(ds)
         print("Aqn in thread:", time.time()-start_time, "seconds")
         
     def threaded_acq(self, jvar, ts1, ts2):

@@ -230,6 +230,7 @@ class LoggingDB(object):
         jpype.attachThreadToJVM()
         start_time = time.time()
         v = jvar.getVariableName()
+        print(v)
         ds = self._ts.getDataInTimeWindowFilteredByFundamentals(jvar, ts1, ts2, fundamentals)
         if not self._silent: print('Retrieved {0} values for {1}'.format(ds.size(), v))
         self._datasets.append(ds)
@@ -299,8 +300,9 @@ class LoggingDB(object):
         for v in variables:
             jvar = variables.getVariable(v)
             if t2 is None:
-                t = threading.Thread(target=self.threaded_acq, args=(jvar, ts1))
-                t.start()
+                ds = [self._ts.getLastDataPriorToTimestampWithinDefaultInterval(jvar, ts1)]
+                self._datasets.append(ds)
+                if not self._silent: print('Retrieved {0} values for {1}'.format(1, jvar.getVariableName()))
             else:
                 if fundamental is not None:
                     t = threading.Thread(target=self.threaded_filtered_acq, args=(jvar, ts1, ts2, fundamentals))

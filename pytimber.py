@@ -232,6 +232,7 @@ class LoggingDB(object):
         start_time = time.time()
         print("Acquiring in thread.")
         v = jvar.getVariableName()
+        print(f)
         ds = self._ts.getDataInTimeWindowFilteredByFundamentals(jvar, ts1, ts2, f)
         if not self._silent: print('Retrieved {0} values for {1}'.format(ds.size(), v))
         self._datasets.append(ds)
